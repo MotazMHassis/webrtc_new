@@ -1,105 +1,93 @@
-var express = require('express');
-var app = express();
-var http = require('http').Server(app);
-var io = require('socket.io')(http);
-app.use(express.static(__dirname + '/public'));
-var allclients=[];
-//no need of separate array for clients. pairArray will do the work
-/*var clients = [];*/
-io.on('connection', function(socket){
-    console.log('A connection made by ' + socket.id);
-    allclients.push(socket.id);
-    console.log(allclients)
-    //add newly connected client to clients array
-    /*clients.push(socket.id);*/
-    //send greetings to newly connected client
-    io.emit('allclientList',allclients)
-    io.to(socket.id).emit('welcome', socket.id);
-    socket.on('message', function(msg){
-    	console.log(msg);
-        sendMessage(socket, 'message', msg);
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
+// Serve static files from the "public" directory
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Store connected clients
+const allClients = new Set();
+
+io.on('connection', (socket) => {
+    console.log(`New client connected: ${socket.id}`);
+    
+    // Add client to connected clients list
+    allClients.add(socket.id);
+    
+    // Broadcast updated client list to all connected clients
+    io.emit('allclientList', Array.from(allClients));
+    
+    // Handle incoming call
+    socket.on('offer', (data) => {
+        console.log(`Offer received from ${socket.id} to ${data.to}`);
+        socket.to(data.to).emit('offer', {
+            offer: data.offer,
+            from: socket.id
+        });
     });
-    socket.on('chatMessage', function(chat) {
-    	console.log(chat);
-    	sendMessage(socket, 'chatMessage', chat);
+    
+    // Handle call answer
+    socket.on('answer', (data) => {
+        console.log(`Answer received from ${socket.id} to ${data.to}`);
+        socket.to(data.to).emit('answer', {
+            answer: data.answer,
+            from: socket.id
+        });
     });
-    socket.on('makeConnection', function(id) {
-    	console.log("connection request: " + id);
-        if(id != socket.id) {
-        	makeConnection(socket.id, id);
-        }
-        else {
-        	io.to(socket.id).emit('toast', "Enter your friend's id");
+    
+    // Handle ICE candidates
+    socket.on('candidate', (data) => {
+        console.log(`ICE candidate received from ${socket.id} to ${data.to}`);
+        socket.to(data.to).emit('candidate', {
+            candidate: data.candidate,
+            from: socket.id
+        });
+    });
+    
+    // Handle call rejection
+    socket.on('rejectCall', (data) => {
+        console.log(`Call rejected by ${socket.id}`);
+        socket.to(data.to).emit('callRejected', {
+            from: socket.id
+        });
+    });
+    
+    // Handle call end
+    socket.on('endCall', (data) => {
+        console.log(`Call ended by ${socket.id}`);
+        if (data.to) {
+            socket.to(data.to).emit('callEnded', {
+                from: socket.id
+            });
         }
     });
-    socket.on('disconnect', function() {
-        console.log(socket.id + " disconnected");
-        function eraseclientid(id){ 
-            allclients=allclients.filter(item => item !== id);
-        }
-        eraseclientid(socket.id)
-        io.emit('allclientList',allclients)
-        //notify user that his partener has been disconnected
-        sendMessage(socket, 'disconnected', socket.id);
-        //remove this from clients
-        /*var index = clients.indexOf(socket.id);
-        clients.splice(index, 1);*/
-        //remove corresponding connection pair
-        removeConnection(socket.id);
+    
+    // Handle client disconnect
+    socket.on('disconnect', () => {
+        console.log(`Client disconnected: ${socket.id}`);
+        allClients.delete(socket.id);
+        io.emit('allclientList', Array.from(allClients));
     });
 });
-//this function will send message to connected client or other partener
-function sendMessage(socket, symbol, message) {
-	var client = getClient(socket.id);
-	if(client != null) {
-		io.to(client).emit(symbol, message);
-	}
-}
-//class for connectionPair
-var ConnectionPair = function(client1, client2) {
-	var clientSource = client1;
-	var clientDestination = client2;
-	this.getDestinationClient = function(sourceClient) {
-		if(clientSource == sourceClient) {
-			return clientDestination;
-		}
-		else if(clientDestination == sourceClient){
-			return clientSource;
-		}
-		else {
-			return null;
-		}
-	}
-}
-//array will contain all sourec and client pair which are connected to each other
-var pairArray = [];
-//to make connection of two clients
-var makeConnection = function(client1, client2) {
-    var connectionPair = new ConnectionPair(client1, client2);
-    pairArray.push(connectionPair);
-    console.log("connecteion made");
-    io.to(client1).emit("connected", client2);
-    io.to(client2).emit("connected", client1);
-}
-var removeConnection = function(client) {
-	var i, length = pairArray.length;
-    for(i = 0; i < length; i++) {
-        if(pairArray[i].getDestinationClient(client) != null) {
-        	pairArray.splice(i, 1);
-        	break;
-        }
-    }
-}
-//will return the client of connected source
-var getClient = function(source) {
-	var i, length = pairArray.length, client;
-    for(i = 0; i < length; i++) {
-    	client = pairArray[i].getDestinationClient(source);
-        if(client != null) {
-        	return client;
-        }
-    }
-}
-http.listen(3500, function(){
-    console.log('listening on *:3500');
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).send('Something broke!');
+});
+
+// Start the server
+const PORT = process.env.PORT || 3500;
+server.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
 });
