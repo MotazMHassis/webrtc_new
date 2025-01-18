@@ -1,11 +1,11 @@
 const express = require('express');
 const http = require('http');
-const { Server } = require('socket.io');
+const socketIO = require('socket.io');  // Changed import
 const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
+const io = socketIO(server, {          // Changed server creation
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
