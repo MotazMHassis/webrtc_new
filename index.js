@@ -1,93 +1,68 @@
 const express = require('express');
 const http = require('http');
-const socketIO = require('socket.io');  // Changed import
-const path = require('path');
+const { Server } = require('socket.io');
 
+// Create an Express app and an HTTP server
 const app = express();
 const server = http.createServer(app);
-const io = socketIO(server, {          // Changed server creation
+
+// Create a Socket.IO server
+const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+    origin: '*', // Allow all origins for simplicity
+    methods: ['GET', 'POST'],
+  },
 });
 
-// Serve static files from the "public" directory
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Store connected clients
-const allClients = new Set();
+// Store connected users
+const users = {};
 
 io.on('connection', (socket) => {
-    console.log(`New client connected: ${socket.id}`);
-    
-    // Add client to connected clients list
-    allClients.add(socket.id);
-    
-    // Broadcast updated client list to all connected clients
-    io.emit('allclientList', Array.from(allClients));
-    
-    // Handle incoming call
-    socket.on('offer', (data) => {
-        console.log(`Offer received from ${socket.id} to ${data.to}`);
-        socket.to(data.to).emit('offer', {
-            offer: data.offer,
-            from: socket.id
-        });
-    });
-    
-    // Handle call answer
-    socket.on('answer', (data) => {
-        console.log(`Answer received from ${socket.id} to ${data.to}`);
-        socket.to(data.to).emit('answer', {
-            answer: data.answer,
-            from: socket.id
-        });
-    });
-    
-    // Handle ICE candidates
-    socket.on('candidate', (data) => {
-        console.log(`ICE candidate received from ${socket.id} to ${data.to}`);
-        socket.to(data.to).emit('candidate', {
-            candidate: data.candidate,
-            from: socket.id
-        });
-    });
-    
-    // Handle call rejection
-    socket.on('rejectCall', (data) => {
-        console.log(`Call rejected by ${socket.id}`);
-        socket.to(data.to).emit('callRejected', {
-            from: socket.id
-        });
-    });
-    
-    // Handle call end
-    socket.on('endCall', (data) => {
-        console.log(`Call ended by ${socket.id}`);
-        if (data.to) {
-            socket.to(data.to).emit('callEnded', {
-                from: socket.id
-            });
-        }
-    });
-    
-    // Handle client disconnect
-    socket.on('disconnect', () => {
-        console.log(`Client disconnected: ${socket.id}`);
-        allClients.delete(socket.id);
-        io.emit('allclientList', Array.from(allClients));
-    });
+  console.log(`New user connected: ${socket.id}`);
+
+  // When a new user joins, add them to the users list and broadcast the updated list
+  socket.on('join', (userName) => {
+    users[socket.id] = userName;
+    console.log(`${userName} joined with ID: ${socket.id}`);
+    io.emit('allclientList', Object.values(users));
+  });
+
+  // Handle an offer from one client
+  socket.on('offer', (data) => {
+    const { to, offer } = data;
+    console.log(`Offer sent from ${socket.id} to ${to}`);
+    io.to(to).emit('offer', { from: socket.id, offer });
+  });
+
+  // Handle an answer from one client
+  socket.on('answer', (data) => {
+    const { to, answer } = data;
+    console.log(`Answer sent from ${socket.id} to ${to}`);
+    io.to(to).emit('answer', { from: socket.id, answer });
+  });
+
+  // Handle ICE candidates
+  socket.on('candidate', (data) => {
+    const { to, candidate } = data;
+    console.log(`Candidate sent from ${socket.id} to ${to}`);
+    io.to(to).emit('candidate', { from: socket.id, candidate });
+  });
+
+  // Handle user disconnection
+  socket.on('disconnect', () => {
+    console.log(`User disconnected: ${socket.id}`);
+    delete users[socket.id];
+    io.emit('allclientList', Object.values(users));
+  });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).send('Something broke!');
+// Basic route to check server status
+app.get('/', (req, res) => {
+  res.send('WebRTC Signaling Server is running.');
 });
 
 // Start the server
-const PORT = process.env.PORT || 3500;
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });
