@@ -1,13 +1,13 @@
 const express = require('express');
 const http = require('http');
-const { Server } = require('socket.io');
+const socketIO = require('socket.io');
 
 // Create an Express app and an HTTP server
 const app = express();
 const server = http.createServer(app);
 
-// Create a Socket.IO server
-const io = new Server(server, {
+// Create a Socket.IO server with updated initialization
+const io = socketIO(server, {
   cors: {
     origin: '*', // Allow all origins for simplicity
     methods: ['GET', 'POST'],
@@ -24,7 +24,7 @@ io.on('connection', (socket) => {
   socket.on('join', (userName) => {
     users[socket.id] = userName;
     console.log(`${userName} joined with ID: ${socket.id}`);
-    io.emit('allclientList', Object.values(users));
+    io.emit('userList', Object.values(users));
   });
 
   // Handle an offer from one client
@@ -52,7 +52,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);
     delete users[socket.id];
-    io.emit('allclientList', Object.values(users));
+    io.emit('userList', Object.values(users));
   });
 });
 
