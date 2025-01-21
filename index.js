@@ -16,7 +16,7 @@ IO.use((socket, next) => {
 });
 
 IO.on("connection", (socket) => {
-  // Log when a user connects
+  // Log when a users connects
   console.log(`User ${socket.user} connected with socket ID: ${socket.id}`);
 
   // Join the user to their own room
