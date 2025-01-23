@@ -6,25 +6,41 @@ const IO = require("socket.io")(port, {
   },
 });
 
+const usersInRoom = new Map(); // Map to store users in each room
+
 IO.use((socket, next) => {
   if (socket.handshake.query) {
     let callerId = socket.handshake.query.callerId;
+    let room = socket.handshake.query.room || 'default'; // Default room if not provided
     socket.user = callerId;
+    socket.room = room;
     next();
   }
 });
 
 IO.on("connection", (socket) => {
-  console.log(`User ${socket.user} connected`); // Log when a user connects
+  console.log(`User ${socket.user} connected to room ${socket.room}`);
 
-  socket.join(socket.user);
+  // Add user to the room
+  socket.join(socket.room);
+
+  // Initialize the room if it doesn't exist
+  if (!usersInRoom.has(socket.room)) {
+    usersInRoom.set(socket.room, new Set());
+  }
+
+  // Add the user to the room's user list
+  usersInRoom.get(socket.room).add(socket.user);
+
+  // Emit the updated user list to all clients in the room
+  IO.to(socket.room).emit('userList', Array.from(usersInRoom.get(socket.room)));
 
   socket.on("makeCall", (data) => {
     let calleeId = data.calleeId;
     let sdpOffer = data.sdpOffer;
 
-    console.log(`User ${socket.user} is making a call to ${calleeId}`); // Log call offer
-    console.log(`SDP Offer: ${JSON.stringify(sdpOffer)}`); // Log SDP offer
+    console.log(`User ${socket.user} is making a call to ${calleeId}`);
+    console.log(`SDP Offer: ${JSON.stringify(sdpOffer)}`);
 
     socket.to(calleeId).emit("newCall", {
       callerId: socket.user,
@@ -36,8 +52,8 @@ IO.on("connection", (socket) => {
     let callerId = data.callerId;
     let sdpAnswer = data.sdpAnswer;
 
-    console.log(`User ${socket.user} answered the call from ${callerId}`); // Log call answer
-    console.log(`SDP Answer: ${JSON.stringify(sdpAnswer)}`); // Log SDP answer
+    console.log(`User ${socket.user} answered the call from ${callerId}`);
+    console.log(`SDP Answer: ${JSON.stringify(sdpAnswer)}`);
 
     socket.to(callerId).emit("callAnswered", {
       callee: socket.user,
@@ -49,8 +65,8 @@ IO.on("connection", (socket) => {
     let calleeId = data.calleeId;
     let iceCandidate = data.iceCandidate;
 
-    console.log(`User ${socket.user} sent ICE candidate to ${calleeId}`); // Log ICE candidate
-    console.log(`ICE Candidate: ${JSON.stringify(iceCandidate)}`); // Log ICE candidate details
+    console.log(`User ${socket.user} sent ICE candidate to ${calleeId}`);
+    console.log(`ICE Candidate: ${JSON.stringify(iceCandidate)}`);
 
     socket.to(calleeId).emit("IceCandidate", {
       sender: socket.user,
@@ -59,7 +75,15 @@ IO.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log(`User ${socket.user} disconnected`); // Log when a user disconnects
+    console.log(`User ${socket.user} disconnected from room ${socket.room}`);
+
+    // Remove the user from the room's user list
+    if (usersInRoom.has(socket.room)) {
+      usersInRoom.get(socket.room).delete(socket.user);
+
+      // Emit the updated user list to all clients in the room
+      IO.to(socket.room).emit('userList', Array.from(usersInRoom.get(socket.room)));
+    }
   });
 });
 
