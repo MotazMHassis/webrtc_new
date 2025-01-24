@@ -23,14 +23,14 @@ IO.on("connection", (socket) => {
 
   socket.on("makeCall", (data) => {
     const { callerId, calleeId, sdpOffer } = data;
-    console.log(`sdpOffer ${sdpOffer}`);
+    console.log(`sdpOffer ${JSON.stringify(sdpOffer)}`);
     console.log(`User ${callerId} is making a call to ${calleeId}`);
     socket.to(calleeId).emit("newCall", { callerId, sdpOffer });
   });
 
   socket.on("answerCall", (data) => {
     const { callerId, sdpAnswer } = data;
-     console.log(`sdpAnswer ${sdpAnswer}`);
+     console.log(`sdpAnswer ${JSON.stringify(sdpAnswer)}`);
     console.log(`User ${callerId} answered the call`);
     socket.to(callerId).emit("callAnswered", { sdpAnswer });
   });
