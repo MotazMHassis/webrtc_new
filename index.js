@@ -20,7 +20,7 @@ IO.use((socket, next) => {
   }
 });
 IO.on("connection", (socket) => {
-  console.log(`Caller ${callerId} connected`);
+  console.log(`Caller connected`);
   // User registration
   socket.on('registerUser', (data) => {
     const { userId, status } = data;
