@@ -20,6 +20,7 @@ IO.use((socket, next) => {
   }
 });
 IO.on("connection", (socket) => {
+  console.log(`Caller ${callerId} connected`);
   // User registration
   socket.on('registerUser', (data) => {
     const { userId, status } = data;
@@ -65,6 +66,7 @@ IO.on("connection", (socket) => {
 
   socket.on('disconnect', () => {
     connectedUsers.delete(socket.callerId);
+    console.log(`Caller  disconnect`);
 });
       IO.emit('availableUsers', {
       users: Array.from(connectedUsers)
