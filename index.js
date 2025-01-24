@@ -1,4 +1,5 @@
 const port = process.env.PORT || 5000;
+const { v4: uuidv4 } = require('uuid');
 const IO = require("socket.io")(port, {
   cors: {
     origin: "*",
@@ -17,7 +18,6 @@ IO.use((socket, next) => {
     next(new Error("No callerId provided"));
   }
 });
-
 IO.on("connection", (socket) => {
   console.log(`User ${socket.callerId} connected`);
   
