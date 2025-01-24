@@ -1,5 +1,6 @@
 const port = process.env.PORT || 5000;
 const { v4: uuidv4 } = require('uuid');
+const connectedUsers = new Set();
 const IO = require("socket.io")(port, {
   cors: {
     origin: "*",
@@ -19,22 +20,16 @@ IO.use((socket, next) => {
   }
 });
 IO.on("connection", (socket) => {
-  console.log(`User ${socket.callerId} connected`);
-  
-  // Register the user when they connect
-  users.set(socket.callerId, socket.id);
-
-  socket.on("makeCall", (data) => {
-    const { callerId, calleeId, sdpOffer } = data;
-    const calleeSocketId = users.get(calleeId);
-
-    if (calleeSocketId) {
-      console.log(`User ${callerId} is making a call to ${calleeId}`);
-      IO.to(calleeSocketId).emit("newCall", { callerId, sdpOffer });
-      console.log(`SDP Offer: ${JSON.stringify(sdpOffer)}`);
-    } else {
-      console.log(`Callee ${calleeId} not found`);
-      socket.emit("callError", { message: "Callee not available" });
+  // User registration
+  socket.on('registerUser', (data) => {
+    const { userId, status } = data;
+    if (status === 'available') {
+      connectedUsers.add(userId);
+      
+      // Broadcast available users to all clients
+      IO.emit('availableUsers', {
+        users: Array.from(connectedUsers)
+      });
     }
   });
 
@@ -68,10 +63,12 @@ IO.on("connection", (socket) => {
     }
   });
 
-  socket.on("disconnect", () => {
-    users.delete(socket.callerId);
-    console.log(`User ${socket.callerId} disconnected`);
-  });
+  socket.on('disconnect', () => {
+    connectedUsers.delete(socket.callerId);
 });
+      IO.emit('availableUsers', {
+      users: Array.from(connectedUsers)
+    });
+  });
 
 console.log(`Server is running on port ${port}`);
