@@ -1,76 +1,53 @@
-const port = process.env.PORT || 5000;
-const { v4: uuidv4 } = require('uuid');
-const connectedUsers = new Set();
-const IO = require("socket.io")(port, {
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"],
-  },
-});
-
-const users = new Map(); // Map to store connected users
-
-IO.use((socket, next) => {
-  const callerId = socket.handshake.query.callerId;
-  if (callerId) {
-    socket.callerId = callerId;
-    next();
-  } else {
-    next(new Error("No callerId provided"));
+    methods: ["GET", "POST"]
   }
 });
-IO.on("connection", (socket) => {
-  console.log(`Caller connected`);
-  // User registration
-  socket.on('registerUser', (data) => {
-    const { userId, status } = data;
-    if (status === 'available') {
-      connectedUsers.add(userId);
-      
-      // Broadcast available users to all clients
-      IO.emit('availableUsers', {
-        users: Array.from(connectedUsers)
-      });
-    }
+
+const onlineUsers = new Map();
+
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id);
+
+  socket.on('register', (username) => {
+    onlineUsers.set(socket.id, username);
+    io.emit('userList', Array.from(onlineUsers.entries()));
   });
 
-  socket.on("answerCall", (data) => {
-    const { callerId, sdpAnswer } = data;
-    const callerSocketId = users.get(callerId);
-
-    if (callerSocketId) {
-      console.log(`User ${socket.callerId} answered the call`);
-      console.log(`SDP Answer: ${JSON.stringify(sdpAnswer)}`);
-      IO.to(callerSocketId).emit("callAnswered", { 
-        callerId: socket.callerId, 
-        sdpAnswer 
-      });
-    } else {
-      console.log(`Caller ${callerId} not found`);
-      socket.emit("callError", { message: "Caller not available" });
-    }
-  });
-
-  socket.on("IceCandidate", (data) => {
-    const { calleeId, iceCandidate } = data;
-    const calleeSocketId = users.get(calleeId);
-
-    if (calleeSocketId) {
-      console.log(`Sending ICE candidate to ${calleeId}`);
-      IO.to(calleeSocketId).emit("IceCandidate", { 
-        callerId: socket.callerId,
-        iceCandidate 
-      });
-    }
-  });
-
-  socket.on('disconnect', () => {
-    connectedUsers.delete(socket.callerId);
-    console.log(`Caller  disconnect`);
-});
-      IO.emit('availableUsers', {
-      users: Array.from(connectedUsers)
+  socket.on('callInvite', (data) => {
+    socket.to(data.targetSocketId).emit('incomingCall', {
+      callerSocketId: socket.id,
+      callerName: data.callerName
     });
   });
 
-console.log(`Server is running on port ${port}`);
+  socket.on('callResponse', (data) => {
+    if (data.response === 'accept') {
+      io.to(data.callerSocketId).emit('callAccepted');
+    } else {
+      io.to(data.callerSocketId).emit('callRejected');
+    }
+  });
+
+  socket.on('signal', (data) => {
+    io.to(data.targetSocketId).emit('signal', data);
+  });
+
+  socket.on('disconnect', () => {
+    onlineUsers.delete(socket.id);
+    io.emit('userList', Array.from(onlineUsers.entries()));
+    console.log('User disconnected:', socket.id);
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
