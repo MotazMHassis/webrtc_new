@@ -21,6 +21,7 @@ io.on('connection', (socket) => {
     io.emit('userList', Array.from(onlineUsers.entries()));
   });
 
+  // Call handling
   socket.on('callInvite', (data) => {
     socket.to(data.targetSocketId).emit('incomingCall', {
       callerSocketId: socket.id,
@@ -29,15 +30,35 @@ io.on('connection', (socket) => {
   });
 
   socket.on('callResponse', (data) => {
-    if (data.response === 'accept') {
-      io.to(data.callerSocketId).emit('callAccepted');
-    } else {
-      io.to(data.callerSocketId).emit('callRejected');
-    }
+    io.to(data.callerSocketId).emit('callResponse', {
+      response: data.response,
+      targetSocketId: socket.id
+    });
   });
 
-  socket.on('signal', (data) => {
-    io.to(data.targetSocketId).emit('signal', data);
+  // Messaging
+  socket.on('textMessage', (data) => {
+    io.to(data.targetSocketId).emit('textMessage', {
+      senderId: socket.id,
+      message: data.message,
+      timestamp: new Date().toISOString(),
+      status: 'delivered'
+    });
+  });
+
+  socket.on('mediaMessage', (data) => {
+    io.to(data.targetSocketId).emit('mediaMessage', {
+      senderId: socket.id,
+      type: data.type,
+      url: data.url,
+      timestamp: new Date().toISOString(),
+      status: 'delivered'
+    });
+  });
+
+  // Message status
+  socket.on('messageDelivered', (messageId) => {
+    io.emit('messageDelivered', messageId);
   });
 
   socket.on('disconnect', () => {
