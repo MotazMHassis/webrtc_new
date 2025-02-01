@@ -22,7 +22,7 @@ io.on('connection', (socket) => {
     io.emit('userList', Array.from(onlineUsers.entries()));
   });
 
-  // Call handling
+  // Call handlinggg
   socket.on('callInvite', (data) => {
     socket.to(data.targetSocketId).emit('incomingCall', {
       callerSocketId: socket.id,
