@@ -18,8 +18,14 @@ io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
   socket.on('register', (username) => {
-    onlineUsers.set(socket.id, username);
-    io.emit('userList', Array.from(onlineUsers.entries()));
+    onlineUsers.set(socket.id, {
+      id: socket.id,
+      username: username,
+      status: 'online'
+    });
+    
+    // Send properly formatted user objects
+    io.emit('userList', Array.from(onlineUsers.values()));
   });
 
   // Call handlinggg
@@ -84,8 +90,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     onlineUsers.delete(socket.id);
-    typingUsers.delete(socket.id);
-    io.emit('userList', Array.from(onlineUsers.entries()));
+    io.emit('userList', Array.from(onlineUsers.values()));
     console.log('User disconnected:', socket.id);
   });
 });
