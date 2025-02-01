@@ -12,6 +12,7 @@ const io = new Server(server, {
 });
 
 const onlineUsers = new Map();
+const typingUsers = new Map();
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
@@ -25,27 +26,47 @@ io.on('connection', (socket) => {
   socket.on('callInvite', (data) => {
     socket.to(data.targetSocketId).emit('incomingCall', {
       callerSocketId: socket.id,
-      callerName: data.callerName
+      callerName: data.callerName,
+      callType: data.callType
     });
   });
 
   socket.on('callResponse', (data) => {
     io.to(data.callerSocketId).emit('callResponse', {
       response: data.response,
-      targetSocketId: socket.id
+      targetSocketId: socket.id,
+      callType: data.callType
     });
   });
 
   // Messaging
   socket.on('textMessage', (data) => {
-    io.to(data.targetSocketId).emit('textMessage', {
-      senderId: socket.id,
-      message: data.message,
-      timestamp: new Date().toISOString(),
-      status: 'delivered'
+    const recipients = data.groupId ? io.sockets.adapter.rooms.get(data.groupId) || [] : [data.targetSocketId];
+    recipients.forEach(recipient => {
+      io.to(recipient).emit('message', {
+        ...data,
+        senderId: socket.id,
+        timestamp: new Date().toISOString(),
+        status: 'delivered'
+      });
     });
   });
-
+  // Typing indicators
+  socket.on('typing', (data) => {
+    socket.to(data.targetSocketId).emit('typing', {
+      senderId: socket.id,
+      isTyping: data.isTyping
+    });
+  });
+    // Group management
+  socket.on('createGroup', (groupName) => {
+    const groupId = `group_${Date.now()}`;
+    socket.join(groupId);
+    io.emit('groupCreated', { groupId, groupName });
+  });
+    socket.on('joinGroup', (groupId) => {
+    socket.join(groupId);
+  });
   socket.on('mediaMessage', (data) => {
     io.to(data.targetSocketId).emit('mediaMessage', {
       senderId: socket.id,
@@ -63,6 +84,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     onlineUsers.delete(socket.id);
+    typingUsers.delete(socket.id);
     io.emit('userList', Array.from(onlineUsers.entries()));
     console.log('User disconnected:', socket.id);
   });
