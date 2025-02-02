@@ -17,7 +17,7 @@ const groups = new Map();
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  // User registration
+  // User registrationm
   socket.on('register', (username) => {
     onlineUsers.set(socket.id, {
       id: socket.id,
