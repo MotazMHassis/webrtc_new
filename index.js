@@ -12,7 +12,7 @@ const io = new Server(server, {
 });
 
 const onlineUsers = new Map();
-
+const messages = new Map();
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
@@ -21,11 +21,18 @@ io.on('connection', (socket) => {
     onlineUsers.set(socket.id, {
       id: socket.id,
       username: username,
-      status: 'online'
+      status: 'online',
+      lastSeen: Date.now(),
+      typingStatus: false
     });
     io.emit('userList', Array.from(onlineUsers.values()));
   });
-
+  socket.on('messageRead', (messageIds) => {
+    messageIds.forEach(id => {
+      const msg = messages.get(id);
+      if (msg) msg.status = 'read';
+    });
+  });
   // Call handling
   socket.on('callInvite', (data) => {
     socket.to(data.targetId).emit('incomingCall', {
@@ -34,7 +41,13 @@ io.on('connection', (socket) => {
       callType: data.callType
     });
   });
-
+  socket.on('typingStatus', ({ isTyping }) => {
+    const user = onlineUsers.get(socket.id);
+    if (user) {
+      user.typingStatus = isTyping;
+      io.emit('userList', Array.from(onlineUsers.values()));
+    }
+  });
   socket.on('callResponse', (data) => {
     io.to(data.callerId).emit('callResponse', {
       response: data.response,
@@ -46,6 +59,13 @@ io.on('connection', (socket) => {
   // Messaging
   socket.on('message', (data) => {
     const recipient = data.targetSocketId;
+    const messageId = require('crypto').randomBytes(16).toString('hex');
+    messages.set(messageId, {
+      ...data,
+      id: messageId,
+      status: 'sent',
+      timestamp: Date.now()
+    });
     if (recipient) {
       socket.to(recipient).emit('message', {
         ...data,
@@ -82,11 +102,16 @@ io.on('connection', (socket) => {
   });
 
   // Cleanup on disconnect
-  socket.on('disconnect', () => {
-    onlineUsers.delete(socket.id);
+// Update disconnect handler
+socket.on('disconnect', () => {
+  const user = onlineUsers.get(socket.id);
+  if (user) {
+    user.status = 'offline';
+    user.lastSeen = Date.now();
     io.emit('userList', Array.from(onlineUsers.values()));
-    console.log('User disconnected:', socket.id);
-  });
+  }
+  onlineUsers.delete(socket.id);
+});
 });
 
 const PORT = process.env.PORT || 3000;
