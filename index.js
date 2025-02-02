@@ -12,12 +12,11 @@ const io = new Server(server, {
 });
 
 const onlineUsers = new Map();
-const groups = new Map();
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  // User registrationm
+  // User registration
   socket.on('register', (username) => {
     onlineUsers.set(socket.id, {
       id: socket.id,
@@ -46,18 +45,15 @@ io.on('connection', (socket) => {
 
   // Messaging
   socket.on('message', (data) => {
-    const recipients = data.groupId ? 
-      io.sockets.adapter.rooms.get(data.groupId) || [] : 
-      [data.targetSocketId];
-
-    recipients.forEach(recipient => {
-      io.to(recipient).emit('message', {
+    const recipient = data.targetSocketId;
+    if (recipient) {
+      socket.to(recipient).emit('message', {
         ...data,
         senderId: socket.id,
         timestamp: new Date().toISOString(),
         status: 'delivered'
       });
-    });
+    }
   });
 
   // WebRTC signaling
@@ -72,53 +68,12 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Group management
-  socket.on('createGroup', (groupName) => {
-    const groupId = `group_${Date.now()}`;
-    groups.set(groupId, {
-      id: groupId,
-      name: groupName,
-      members: [socket.id]
-    });
-    socket.join(groupId);
-    io.emit('groupList', Array.from(groups.values()));
-  });
-
-  socket.on('joinGroup', (groupId) => {
-    if (groups.has(groupId)) {
-      groups.get(groupId).members.push(socket.id);
-      socket.join(groupId);
-      io.emit('groupList', Array.from(groups.values()));
-    }
-  });
-
-  // Group messaging
-  socket.on('groupMessage', (data) => {
-    const groupId = data.groupId;
-    const recipients = io.sockets.adapter.rooms.get(groupId) || [];
-    recipients.forEach(recipient => {
-      io.to(recipient).emit('message', {
-        ...data,
-        senderId: socket.id,
-        timestamp: new Date().toISOString(),
-        status: 'delivered'
-      });
-    });
-  });
-
   // Typing indicators
   socket.on('typing', (data) => {
-    if (data.groupId) {
-      socket.to(data.groupId).emit('typing', {
-        senderId: socket.id,
-        isTyping: data.isTyping
-      });
-    } else {
-      socket.to(data.targetSocketId).emit('typing', {
-        senderId: socket.id,
-        isTyping: data.isTyping
-      });
-    }
+    socket.to(data.targetSocketId).emit('typing', {
+      senderId: socket.id,
+      isTyping: data.isTyping
+    });
   });
 
   // User list requests
@@ -129,17 +84,7 @@ io.on('connection', (socket) => {
   // Cleanup on disconnect
   socket.on('disconnect', () => {
     onlineUsers.delete(socket.id);
-    
-    // Remove from groups
-    groups.forEach((group, groupId) => {
-      group.members = group.members.filter(member => member !== socket.id);
-      if (group.members.length === 0) {
-        groups.delete(groupId);
-      }
-    });
-
     io.emit('userList', Array.from(onlineUsers.values()));
-    io.emit('groupList', Array.from(groups.values()));
     console.log('User disconnected:', socket.id);
   });
 });
