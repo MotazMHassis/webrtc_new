@@ -26,6 +26,7 @@ io.on('connection', (socket) => {
       callerSocketId: socket.id,
       callerName: data.callerName
     });
+    console.log(`Call Invite: ${data.callerName} (${socket.id}) is calling ${data.targetSocketId}`);
   });
 
   socket.on('callResponse', (data) => {
@@ -34,6 +35,8 @@ io.on('connection', (socket) => {
     } else {
       io.to(data.callerSocketId).emit('callRejected');
     }
+    console.log(`Call Response: ${data.callerSocketId} received ${data.response} from ${socket.id}`);
+
   });
 
   socket.on('signal', (data) => {
